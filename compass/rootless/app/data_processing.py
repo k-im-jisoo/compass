@@ -9,16 +9,14 @@ import pandas as pd
 from bs4 import BeautifulSoup
 import pycountry
 
-def get_embassy_countries():
-	url = 'https://www.usembassy.gov/'
-	response = requests.get(url)
-	soup = BeautifulSoup(response.text, 'html.parser')
-	country_list = []
-	for link in soup.select('section#embassy-list a'):  # Main embassy list section
-		country = link.get_text(strip=True)
-		if country and country not in country_list:
-			country_list.append(country)
-	return pd.Series(country_list, name='Country Name')
+
+def get_worldbank_countries(indicator_df):
+	# Use the 'Country Name' and 'Country Code' columns from the indicator DataFrame
+	countries = indicator_df[['Country Name', 'Country Code']].drop_duplicates()
+	# Remove aggregates (e.g., "World", "High income", etc.)
+	aggregates = ["World", "High income", "Low income", "Upper middle income", "Lower middle income", "Euro area", "European Union", "OECD members", "Post-demographic dividend", "Pre-demographic dividend", "IDA", "IBRD", "Sub-Saharan Africa", "East Asia & Pacific", "Europe & Central Asia", "Latin America & Caribbean", "Middle East & North Africa", "North America", "South Asia"]
+	countries = countries[~countries['Country Name'].isin(aggregates)]
+	return countries.reset_index(drop=True)
 
 def map_to_iso3(country_series):
 	iso3_codes = []
@@ -50,16 +48,8 @@ def get_latest_indicator(df, value_col_name):
 	return df[['Country Name', 'Country Code', 'Latest Value']].rename(columns={'Latest Value': value_col_name})
 
 def main():
-	# 1. Get country list
-	print('Collecting country list from US Embassy website...')
-	countries = get_embassy_countries()
-	print(f'Found {len(countries)} countries.')
 
-	# 2. Map to ISO-3 codes
-	print('Mapping countries to ISO-3 codes...')
-	country_df = map_to_iso3(countries)
-
-	# 3. Download indicators
+	# 1. Download indicators
 	indicators = {
 		'SH.MED.BEDS.ZS': 'Hospital Beds',
 		'EN.ATM.PM25.MC.M3': 'Air Pollution',
@@ -73,21 +63,29 @@ def main():
 		df = fetch_indicator(code)
 		indicator_dfs[name] = get_latest_indicator(df, name)
 
-	# 4. Merge all indicators on ISO-3 code
+	# 2. Get country list from the first indicator
+	print('Extracting country list from World Bank data...')
+	first_indicator_df = list(indicator_dfs.values())[0]
+	country_df = get_worldbank_countries(first_indicator_df)
+	country_df = country_df.rename(columns={"Country Code": "Country ISO-3 Code"})
+
+	# 3. Merge all indicators on ISO-3 code
 	print('Merging indicator data...')
 	merged = country_df.copy()
 	for name, df in indicator_dfs.items():
 		merged = pd.merge(merged, df[['Country Code', name]], left_on='Country ISO-3 Code', right_on='Country Code', how='left')
 		merged = merged.drop(columns=['Country Code'])
 
-	# 5. Handle missing values
+	# 4. Handle missing values
 	print('Handling missing values...')
-	# Drop countries with all indicators missing
 	indicator_cols = list(indicators.values())
 	merged = merged.dropna(subset=indicator_cols, how='all')
-	# Impute missing values with column mean
 	for col in indicator_cols:
 		merged[col] = merged[col].fillna(merged[col].mean())
+
+	# 5. Round all numeric columns to two decimal places
+	num_cols = merged.select_dtypes(include=['float', 'int']).columns
+	merged[num_cols] = merged[num_cols].round(2)
 
 	# 6. Save to CSV
 	merged.to_csv('relocation_data.csv', index=False)
