@@ -51,7 +51,7 @@ def main():
 
 	# 1. Download indicators
 	indicators = {
-		'SH.MED.BEDS.ZS': 'Hospital Beds',
+		'SH.MED.PHYS.ZS': 'Physicians per 1,000 People',
 		'EN.ATM.PM25.MC.M3': 'Air Pollution',
 		'SE.SEC.NENR': 'Secondary School Enrollment',
 		'SH.DTH.COMM.ZS': 'Disease Mortality',
