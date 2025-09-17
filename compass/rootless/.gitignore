@@ -1,0 +1,11 @@
+# Ignore node_modules, Python, macOS, and VSCode files
+node_modules/
+.env
+__pycache__/
+.DS_Store
+.vscode/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo
